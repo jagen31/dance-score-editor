@@ -9,7 +9,9 @@
 (require racket/class
          racket/gui/base
          racket/snip
-         racket/math)
+         racket/math
+         racket/port
+         shrubbery/parse)   ; parse the emitted art code into a Rhombus term
 
 (provide dance-snip% dance-snip-class snip-class)
 
@@ -38,7 +40,7 @@
 
 ;; --- the snip ------------------------------------------------------------
 (define dance-snip%
-  (class snip%
+  (class* snip% (readable-snip<%>)               ; readable => reads AS its art code
     (init-field [l 6] [r 6] [facing 'towards])   ; both arms down, facing out
     (super-new)
     (inherit get-admin set-snipclass set-flags get-flags)
@@ -108,8 +110,14 @@
     (define/override (write f)
       (send f put l) (send f put r) (send f put (facing->index facing)))
 
+    ;; danceart (Art 4): the pose is `arm_diagram L R` under a `facing` coord
     (define/public (->art-string)
-      (format "arm-diagram ~a ~a\nfacing ~a\n" l r facing))))
+      (format "at [facing ~a]: arm_diagram ~a ~a\n" facing l r))
+
+    ;; read AS code when the file is run: parse the art string into a Rhombus
+    ;; term so the snip becomes `at [facing ...]: arm_diagram ...` in place
+    (define/public (read-special src line col pos)
+      (parse-all (open-input-string (send this ->art-string)) #:source src))))
 
 ;; --- the snip class (persistence) ---------------------------------------
 (define dance-snip-class%

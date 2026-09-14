@@ -11,7 +11,9 @@
          racket/gui/base
          racket/snip
          racket/math
-         racket/list)
+         racket/list
+         racket/port
+         shrubbery/parse)
 
 (provide score-snip% score-snip-class snip-class)
 
@@ -40,7 +42,7 @@
 
 ;; --- the snip ------------------------------------------------------------
 (define score-snip%
-  (class snip%
+  (class* snip% (readable-snip<%>)
     (init-field [notes (make-hash)])   ; (cons col row) -> #t
     (super-new)
     (inherit get-admin set-snipclass set-flags get-flags)
@@ -107,7 +109,12 @@
              (for/list ([k (in-list (sorted-keys notes))])
                (define-values (letter oct) (row->pitch (cdr k)))
                (format "at [interval ~a ~a]: note ~a 0 ~a\n"
-                       (car k) (add1 (car k)) letter oct))))))
+                       (car k) (add1 (car k)) letter oct))))
+
+    ;; read AS code when the file is run: the note forms as a Rhombus term
+    ;; sequence (splices where the snip sits -- e.g. inside a `music:` block)
+    (define/public (read-special src line col pos)
+      (parse-all (open-input-string (send this ->art-string)) #:source src))))
 
 ;; --- the snip class (persistence) ---------------------------------------
 (define score-snip-class%
