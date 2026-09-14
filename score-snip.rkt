@@ -112,9 +112,14 @@
                        (car k) (add1 (car k)) letter oct))))
 
     ;; read AS code when the file is run: the note forms as a Rhombus term
-    ;; sequence (splices where the snip sits -- e.g. inside a `music:` block)
+    ;; sequence (splices where the snip sits -- e.g. inside a `music:` block).
+    ;; Strip the parse's lexical context so the enclosing module's scope binds
+    ;; `at` / `interval` / `note` (see dance-snip for why).
     (define/public (read-special src line col pos)
-      (parse-all (open-input-string (send this ->art-string)) #:source src))))
+      (datum->syntax
+       #f
+       (syntax->datum
+        (parse-all (open-input-string (send this ->art-string)) #:source src))))))
 
 ;; --- the snip class (persistence) ---------------------------------------
 (define score-snip-class%
