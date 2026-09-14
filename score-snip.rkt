@@ -13,7 +13,9 @@
          racket/math
          racket/list
          racket/port
-         shrubbery/parse)
+         shrubbery/parse
+         (only-in "art-anchor.rhm"  ; a syntax object whose lexical context carries
+                  anchor))          ; facade/tonart4's bindings (see read-special)
 
 (provide score-snip% score-snip-class snip-class)
 
@@ -113,11 +115,11 @@
 
     ;; read AS code when the file is run: the note forms as a Rhombus term
     ;; sequence (splices where the snip sits -- e.g. inside a `music:` block).
-    ;; Strip the parse's lexical context so the enclosing module's scope binds
-    ;; `at` / `interval` / `note` (see dance-snip for why).
+    ;; Re-stamp the parsed identifiers with `anchor`'s context so `at` /
+    ;; `interval` / `note` bind to the real facade/tonart4 forms (see dance-snip).
     (define/public (read-special src line col pos)
       (datum->syntax
-       #f
+       anchor
        (syntax->datum
         (parse-all (open-input-string (send this ->art-string)) #:source src))))))
 

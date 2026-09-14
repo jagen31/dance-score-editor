@@ -11,7 +11,9 @@
          racket/snip
          racket/math
          racket/port
-         shrubbery/parse)   ; parse the emitted art code into a Rhombus term
+         shrubbery/parse           ; parse the emitted art code into a Rhombus term
+         (only-in "art-anchor.rhm"  ; a syntax object whose lexical context carries
+                  anchor))          ; facade/danceart's bindings (see read-special)
 
 (provide dance-snip% dance-snip-class snip-class)
 
@@ -116,12 +118,13 @@
 
     ;; read AS code when the file is run: parse the art string into a Rhombus
     ;; term so the snip becomes `at [facing ...]: arm_diagram ...` in place.
-    ;; Strip the parse's lexical context (datum->syntax #f ...) so the enclosing
-    ;; module's own scope binds `at` / `facing` / `arm_diagram` -- otherwise the
-    ;; parsed identifiers carry shrubbery's scopes and don't match facade's.
+    ;; `parse-all` gives the identifiers only shrubbery's own scopes, so `at` /
+    ;; `facing` / `arm_diagram` wouldn't be `free-identifier=?` to what facade's
+    ;; interpreter matches.  Re-stamp them with `anchor`'s context (a module that
+    ;; imports danceart), which makes them bind to the real facade/danceart forms.
     (define/public (read-special src line col pos)
       (datum->syntax
-       #f
+       anchor
        (syntax->datum
         (parse-all (open-input-string (send this ->art-string)) #:source src))))))
 
