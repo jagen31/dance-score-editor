@@ -11,9 +11,8 @@
          racket/snip
          racket/math
          racket/port
-         shrubbery/parse           ; parse the emitted art code into a Rhombus term
-         (only-in "art-anchor.rhm"  ; a syntax object whose lexical context carries
-                  anchor))          ; facade/danceart's bindings (see read-special)
+         shrubbery/parse    ; parse the emitted art code into a Rhombus term
+         "art-common.rkt")  ; art->block: wrap the forms for read-special
 
 (provide dance-snip% dance-snip-class snip-class)
 
@@ -116,17 +115,20 @@
     (define/public (->art-string)
       (format "at [facing ~a]: arm_diagram ~a ~a\n" facing l r))
 
-    ;; read AS code when the file is run: parse the art string into a Rhombus
-    ;; term so the snip becomes `at [facing ...]: arm_diagram ...` in place.
-    ;; `parse-all` gives the identifiers only shrubbery's own scopes, so `at` /
-    ;; `facing` / `arm_diagram` wouldn't be `free-identifier=?` to what facade's
-    ;; interpreter matches.  Re-stamp them with `anchor`'s context (a module that
-    ;; imports danceart), which makes them bind to the real facade/danceart forms.
+    ;; read AS code when the file is run.  A `read-special` result becomes ONE
+    ;; term where the snip sits, so we wrap the pose in a single `at []:` block
+    ;; (empty coords = identity); `parse-all` turns that string into shrubbery.
+    ;; We give the parsed forms NO lexical context (`datum->syntax #f`): when the
+    ;; enclosing `#lang rhombus` module is expanded it stamps its OWN scopes onto
+    ;; them, so `at` / `facing` / `arm_diagram` bind to whatever that module
+    ;; imported (danceart).  A borrowed context would shadow that and the facade
+    ;; interpreter would reject the forms as "unknown art form".
     (define/public (read-special src line col pos)
       (datum->syntax
-       anchor
+       #f
        (syntax->datum
-        (parse-all (open-input-string (send this ->art-string)) #:source src))))))
+        (parse-all (open-input-string (art->block (send this ->art-string)))
+                   #:source src))))))
 
 ;; --- the snip class (persistence) ---------------------------------------
 (define dance-snip-class%

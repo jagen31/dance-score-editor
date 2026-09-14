@@ -2,10 +2,9 @@
 
 (define collection "score-dance-editor")
 
-;; rhombus-lib + the Art 4 stack are needed by art-anchor.rhm, which supplies
-;; the lexical context that makes an embedded snip read as facade/danceart code.
-(define deps '("base" "gui-lib" "draw-lib" "drracket-plugin-lib"
-               "rhombus-lib" "facade-lib" "danceart-lib" "tonart4-lib"))
+;; shrubbery-lib supplies the parser used by each snip's read-special; the Art 4
+;; forms bind in whatever module embeds the snip, so no art deps are needed here.
+(define deps '("base" "gui-lib" "draw-lib" "drracket-plugin-lib" "shrubbery-lib"))
 (define build-deps '())
 
 (define version "0.0.1")

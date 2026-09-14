@@ -14,8 +14,7 @@
          racket/list
          racket/port
          shrubbery/parse
-         (only-in "art-anchor.rhm"  ; a syntax object whose lexical context carries
-                  anchor))          ; facade/tonart4's bindings (see read-special)
+         "art-common.rkt")  ; art->block: wrap the note forms for read-special
 
 (provide score-snip% score-snip-class snip-class)
 
@@ -113,15 +112,18 @@
                (format "at [interval ~a ~a]: note ~a 0 ~a\n"
                        (car k) (add1 (car k)) letter oct))))
 
-    ;; read AS code when the file is run: the note forms as a Rhombus term
-    ;; sequence (splices where the snip sits -- e.g. inside a `music:` block).
-    ;; Re-stamp the parsed identifiers with `anchor`'s context so `at` /
-    ;; `interval` / `note` bind to the real facade/tonart4 forms (see dance-snip).
+    ;; read AS code when the file is run: the note forms wrapped in a single
+    ;; `at []:` block (a `read-special` result is one term; the block groups the
+    ;; notes into it).  We give the parsed forms NO lexical context
+    ;; (`datum->syntax #f`) so the enclosing `#lang rhombus` module stamps its own
+    ;; scopes when it expands, binding `at` / `interval` / `note` to whatever it
+    ;; imported (tonart4).  See dance-snip for why a borrowed context fails.
     (define/public (read-special src line col pos)
       (datum->syntax
-       anchor
+       #f
        (syntax->datum
-        (parse-all (open-input-string (send this ->art-string)) #:source src))))))
+        (parse-all (open-input-string (art->block (send this ->art-string)))
+                   #:source src))))))
 
 ;; --- the snip class (persistence) ---------------------------------------
 (define score-snip-class%
