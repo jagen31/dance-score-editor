@@ -123,8 +123,7 @@
       (new score-snip% [notes notes]))))
 
 (define score-snip-class (new score-snip-class%))
-(send score-snip-class set-classname
-      (format "~s" '(lib "score-snip.rkt" "score-dance-editor")))
+(send score-snip-class set-classname "score-dance-editor:score")
 (send score-snip-class set-version 1)
 (send (get-the-snip-class-list) add score-snip-class)
 

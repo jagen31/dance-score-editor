@@ -122,8 +122,7 @@
       (new dance-snip% [l l] [r r] [facing (vector-ref FACINGS (modulo fi 4))]))))
 
 (define dance-snip-class (new dance-snip-class%))
-(send dance-snip-class set-classname
-      (format "~s" '(lib "dance-snip.rkt" "score-dance-editor")))
+(send dance-snip-class set-classname "score-dance-editor:dance")
 (send dance-snip-class set-version 1)
 (send (get-the-snip-class-list) add dance-snip-class)
 
