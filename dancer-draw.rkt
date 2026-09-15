@@ -53,7 +53,7 @@
   ;; never fully hidden: clear the body's vertical half-height, and its horizontal
   ;; half-width plus the shoulder offset (an inward arm crosses to the far edge),
   ;; with room for the round cap.  Then take the longer of that and a base length.
-  (define reach (+ (max (/ body-h 2) (+ (/ body-w 2) sdx)) arm-w 3))
+  (define reach (+ (max (/ body-h 2) (+ (/ body-w 2) (max sdx (* body-w 0.42)))) arm-w 3))
   (define arm-len (max (* bw 0.6) reach))
   (values cx body-cy sdx arm-len arm-w body-w body-h body-cy))
 
@@ -80,13 +80,18 @@
       [(towards) (send dc set-brush YELLOW 'solid) (send dc draw-ellipse bxx byy body-w body-h)]
       [(away)    (send dc set-brush PURPLE 'solid) (send dc draw-ellipse bxx byy body-w body-h)]
       [else
-       ;; profile: yellow front column + purple back column (mirror for `right`)
+       ;; profile: yellow front column + purple back column (mirror for `right`),
+       ;; plus a small yellow "nose" square poking out the front, centred
        (define cw (/ body-w 2))
        (define front-left? (eq? facing 'left))
        (send dc set-brush YELLOW 'solid)
        (send dc draw-rectangle (if front-left? bxx (+ bxx cw)) byy cw body-h)
        (send dc set-brush PURPLE 'solid)
-       (send dc draw-rectangle (if front-left? (+ bxx cw) bxx) byy cw body-h)]))
+       (send dc draw-rectangle (if front-left? (+ bxx cw) bxx) byy cw body-h)
+       (define ns (* body-w 0.42))                 ; the nose
+       (define nsy (- body-cy (/ ns 2)))
+       (send dc set-brush YELLOW 'solid)
+       (send dc draw-rectangle (if front-left? (- bxx ns) (+ bxx body-w)) nsy ns ns)]))
   (define (arm sx p color)
     (define v (clock->vec p))
     (send dc set-pen (make-pen #:color color #:width arm-w #:cap 'round #:join 'round))
