@@ -20,10 +20,20 @@
 (define W 200)
 (define H 230)
 (define CX (quotient W 2))
-(define SHOULDER-Y 70)
-(define SHOULDER-DX 22)
-(define ARM-LEN 46)
-(define STRIP-Y (- H 26))            ; the facing-label strip
+(define SHOULDER-Y 66)
+(define SHOULDER-DX 16)
+(define ARM-LEN 56)
+(define ARM-W 8)                     ; thick, round-capped arms like the figures
+(define BODY-W 78)
+(define BODY-H 120)
+(define BODY-CY 92)                  ; body-ellipse centre y
+(define STRIP-Y (- H 26))           ; the facing-label strip
+
+;; the dancer's palette (danceart: yellow body, purple back, green/blue arms)
+(define YELLOW (make-object color% 250 224 0))
+(define PURPLE (make-object color% 130 0 200))
+(define GREEN  (make-object color% 0 170 0))
+(define BLUE   (make-object color% 0 60 220))
 
 (define FACINGS (vector 'towards 'right 'away 'left))
 (define (facing->index f) (or (for/first ([g (in-vector FACINGS)] [i (in-naturals)] #:when (eq? f g)) i) 0))
@@ -57,33 +67,43 @@
       (when lspace (set-box! lspace 0.0))
       (when rspace (set-box! rspace 0.0)))
 
-    (define (arm dc x y sx sy p)
+    ;; one thick, round-capped arm from a shoulder toward clock position `p`
+    (define (arm dc x y sx sy p color)
       (define v (clock->vec p))
+      (send dc set-pen (make-pen #:color color #:width ARM-W #:cap 'round #:join 'round))
       (send dc draw-line (+ x sx) (+ y sy)
             (+ x sx (* ARM-LEN (car v))) (+ y sy (* ARM-LEN (cdr v)))))
 
+    ;; the body -- a coloured shape whose form shows the facing (danceart's
+    ;; make-body): a yellow blob facing out, purple facing away, a yellow/purple
+    ;; profile for left/right.
+    (define (draw-body dc x y)
+      (send dc set-pen (make-pen #:style 'transparent))
+      (define bx (+ x (- CX (quotient BODY-W 2))))
+      (define by (+ y (- BODY-CY (quotient BODY-H 2))))
+      (define (fill c) (send dc set-brush c 'solid))
+      (case facing
+        [(towards) (fill YELLOW) (send dc draw-ellipse bx by BODY-W BODY-H)]
+        [(away)    (fill PURPLE) (send dc draw-ellipse bx by BODY-W BODY-H)]
+        [else
+         ;; profile: two side-by-side columns, yellow (front) + purple (back);
+         ;; mirror for `right`
+         (define cw (quotient BODY-W 2))
+         (define front-left? (eq? facing 'left))
+         (fill YELLOW)
+         (send dc draw-rectangle (if front-left? bx (+ bx cw)) by cw BODY-H)
+         (fill PURPLE)
+         (send dc draw-rectangle (if front-left? (+ bx cw) bx) by cw BODY-H)]))
+
     (define/override (draw dc x y left top right bottom dx dy draw-caret)
+      (send dc set-smoothing 'aligned)
       (send dc set-brush "white" 'solid)
       (send dc set-pen "black" 1 'solid)
       (send dc draw-rectangle x y W H)
-      (send dc set-pen "black" 3 'solid)
-      ;; head
-      (send dc set-brush "white" 'solid)
-      (send dc draw-ellipse (+ x CX -14) (+ y 22) 28 28)
-      ;; body + legs
-      (send dc draw-line (+ x CX) (+ y 50) (+ x CX) (+ y 130))
-      (send dc draw-line (+ x CX) (+ y 130) (+ x CX -26) (+ y 178))
-      (send dc draw-line (+ x CX) (+ y 130) (+ x CX 26) (+ y 178))
-      ;; arms (left shoulder is on the dancer's left = screen right; but keep it
-      ;; simple/mirror-free: `l` draws on the left of the snip, `r` on the right)
-      (send dc set-pen "blue" 3 'solid)
-      (arm dc x y (- CX SHOULDER-DX) SHOULDER-Y l)
-      (send dc set-pen "red" 3 'solid)
-      (arm dc x y (+ CX SHOULDER-DX) SHOULDER-Y r)
-      ;; shoulders
-      (send dc set-pen "black" 3 'solid)
-      (send dc draw-line (+ x CX (- SHOULDER-DX)) (+ y SHOULDER-Y)
-            (+ x CX SHOULDER-DX) (+ y SHOULDER-Y))
+      ;; body first, then the arms over it
+      (draw-body dc x y)
+      (arm dc x y (- CX SHOULDER-DX) SHOULDER-Y l GREEN)   ; left arm, green
+      (arm dc x y (+ CX SHOULDER-DX) SHOULDER-Y r BLUE)    ; right arm, blue
       ;; facing strip
       (send dc set-pen "black" 1 'solid)
       (send dc draw-line (+ x 0) (+ y STRIP-Y) (+ x W) (+ y STRIP-Y))
