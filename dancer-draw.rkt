@@ -47,7 +47,7 @@
   (define body-w (* bw 0.52))
   (define body-h (* bh 0.66))
   (define body-cy (+ by (* bh 0.46)))
-  (values cx body-cy (* bw 0.22) (* bw 0.38) (max 3 (round (* bh 0.07)))
+  (values cx body-cy (* bw 0.22) (* bw 0.52) (max 3 (round (* bh 0.07)))
           body-w body-h body-cy))
 
 ;; shoulder x of each arm given the facing: (values left-arm-x right-arm-x).
