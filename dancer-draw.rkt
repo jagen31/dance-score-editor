@@ -15,7 +15,7 @@
 
 (provide clock->vec vec->clock
          FACINGS facing->index index->facing
-         draw-dancer dancer-arm-target)
+         draw-dancer dancer-arm-target dancer-arm-hour)
 
 ;; --- palette -------------------------------------------------------------
 (define YELLOW (make-object color% 250 224 0))
@@ -126,3 +126,12 @@
       [(<= (abs (- ex lsx)) (abs (- ex rsx))) (values 'l lsx)]
       [else (values 'r rsx)]))
   (values which (vec->clock (- ex sx) (- ey sy))))
+
+;; the clock hour for a SPECIFIC arm ('l or 'r) from a point -- used while
+;; dragging so the grabbed arm keeps following the cursor (no re-picking).
+(define (dancer-arm-hour bx by bw bh facing which ex ey)
+  (define-values (cx sy sdx arm-len arm-w body-w body-h body-cy)
+    (dancer-geom bx by bw bh))
+  (define-values (lsx rsx) (arm-shoulder-xs facing cx sdx))
+  (define sx (if (eq? which 'l) lsx rsx))
+  (vec->clock (- ex sx) (- ey sy)))

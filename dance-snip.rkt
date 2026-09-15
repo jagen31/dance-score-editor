@@ -1,10 +1,10 @@
 #lang racket/base
 
 ;; An embedded DrRacket editor for one dance pose (a tonart arm-diagram).
-;; Click the left/right half of the figure to point that arm at the clock
-;; position of your click (12 = up, 3 = right, 6 = down, 9 = left); click the
-;; label strip at the bottom to cycle which way the dancer faces.  The snip
-;; persists in the .rkt file and emits `arm_diagram L R` under a `facing`.
+;; Press on an arm and DRAG to swing it around (12 = up, 3 = right, 6 = down,
+;; 9 = left); click the label strip at the bottom to cycle which way the dancer
+;; faces.  The snip persists in the .rkt file and emits `arm_diagram L R` under
+;; a `facing`.
 ;;
 ;; (The score snip embeds the same figure in a lane above the staff; the shape
 ;; and clock/facing math live in dancer-draw.rkt so both stay identical.)
@@ -55,20 +55,31 @@
       (send dc set-pen "black" 1 'solid)
       (send dc draw-line (+ x 0) (+ y STRIP-Y) (+ x W) (+ y STRIP-Y))
       (send dc set-text-foreground "black")
-      (send dc draw-text (format "L=~a R=~a  facing: ~a  (click to edit)" l r facing)
+      (send dc draw-text (format "L=~a R=~a  facing: ~a  (drag an arm)" l r facing)
             (+ x 8) (+ y STRIP-Y 5)))
 
+    (define arm-drag #f)   ; 'l or 'r while an arm is being dragged
+    (define (refresh) (define a (get-admin)) (when a (send a needs-update this 0 0 W H)))
+
     (define/override (on-event dc x y editorx editory evt)
-      (when (send evt button-down? 'left)
-        (define ex (- (send evt get-x) x))
-        (define ey (- (send evt get-y) y))
-        (cond
-          [(>= ey STRIP-Y) (set! facing (index->facing (add1 (facing->index facing))))]
-          [else
-           (define-values (which hour) (dancer-arm-target BX BY BW BH facing ex ey))
-           (if (eq? which 'l) (set! l hour) (set! r hour))])
-        (define a (get-admin))
-        (when a (send a needs-update this 0 0 W H))))
+      (define ex (- (send evt get-x) x))
+      (define ey (- (send evt get-y) y))
+      (cond
+        ;; drag the grabbed arm to follow the cursor
+        [(and arm-drag (send evt dragging?))
+         (define hour (dancer-arm-hour BX BY BW BH facing arm-drag ex ey))
+         (if (eq? arm-drag 'l) (set! l hour) (set! r hour))
+         (refresh)]
+        [(and arm-drag (send evt button-up? 'left)) (set! arm-drag #f)]
+        [(send evt button-down? 'left)
+         (cond
+           [(>= ey STRIP-Y) (set! facing (index->facing (add1 (facing->index facing)))) (refresh)]
+           [else
+            ;; grab the arm on the clicked side; drag to aim it
+            (define-values (which hour) (dancer-arm-target BX BY BW BH facing ex ey))
+            (if (eq? which 'l) (set! l hour) (set! r hour))
+            (set! arm-drag which)
+            (refresh)])]))
 
     (define/override (copy) (new dance-snip% [l l] [r r] [facing facing]))
 

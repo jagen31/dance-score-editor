@@ -92,7 +92,8 @@
     (set-snipclass score-snip-class)
     (set-flags (cons 'handles-events (get-flags)))
 
-    (define drag-key #f)
+    (define drag-key #f)   ; a note being length-dragged
+    (define arm-drag #f)   ; (cons col which) while a dancer's arm is dragged
 
     (define (nlen k) (car (hash-ref notes k)))
     (define (nacc k) (cdr (hash-ref notes k)))
@@ -215,17 +216,29 @@
                 ([col (in-list (hash-keys dancers))])
         (define d (abs (- ex (col-center col))))
         (if (and (<= d (/ DANCER-W 2)) (< d bd)) (values col d) (values best bd))))
+    ;; grab the arm on the clicked side; returns which arm ('l/'r) so the caller
+    ;; can keep dragging it
     (define (edit-arm! col ex ey)
       (define v (hash-ref dancers col))
       (define-values (which hour)
         (dancer-arm-target (dbox-x col) CTRL-H DANCER-W DANCER-BH (vector-ref v 2) ex ey))
+      (if (eq? which 'l) (vector-set! v 0 hour) (vector-set! v 1 hour))
+      which)
+    ;; update the grabbed arm to follow the cursor
+    (define (drag-arm! col which ex ey)
+      (define v (hash-ref dancers col))
+      (define hour (dancer-arm-hour (dbox-x col) CTRL-H DANCER-W DANCER-BH (vector-ref v 2) which ex ey))
       (if (eq? which 'l) (vector-set! v 0 hour) (vector-set! v 1 hour)))
 
     (define/override (on-event dc x y editorx editory evt)
       (define ex (- (send evt get-x) x))
       (define ey (- (send evt get-y) y))
       (cond
-        ;; dragging a note
+        ;; dragging a dancer's arm
+        [(and arm-drag (send evt dragging?))
+         (drag-arm! (car arm-drag) (cdr arm-drag) ex ey) (refresh)]
+        [(and arm-drag (send evt button-up? 'left)) (set! arm-drag #f)]
+        ;; dragging a note's length
         [(and drag-key (send evt dragging?))
          (define new-len (max 1 (add1 (- (col-of ex) (car drag-key)))))
          (unless (= new-len (nlen drag-key)) (set-nlen! drag-key new-len) (refresh))]
@@ -264,7 +277,7 @@
                (define v (hash-ref dancers hit))
                (vector-set! v 2 (index->facing (add1 (facing->index (vector-ref v 2)))))
                (refresh)]
-              [hit (edit-arm! hit ex ey) (refresh)]
+              [hit (set! arm-drag (cons hit (edit-arm! hit ex ey))) (refresh)]
               [else
                (define c (col-at ex))
                (when (and c (not (hash-ref dancers c #f)))
