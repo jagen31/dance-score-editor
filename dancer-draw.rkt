@@ -45,10 +45,17 @@
 (define (dancer-geom bx by bw bh)
   (define cx (+ bx (/ bw 2)))
   (define body-w (* bw 0.52))
-  (define body-h (* bh 0.66))
+  (define body-h (* bh 0.54))               ; a bit shorter
   (define body-cy (+ by (* bh 0.46)))
-  (values cx body-cy (* bw 0.22) (* bw 0.52) (max 3 (round (* bh 0.07)))
-          body-w body-h body-cy))
+  (define sdx (* bw 0.22))
+  (define arm-w (max 3 (round (* bh 0.07))))
+  ;; the arm must poke past the body from ANY shoulder in ANY direction, so it is
+  ;; never fully hidden: clear the body's vertical half-height, and its horizontal
+  ;; half-width plus the shoulder offset (an inward arm crosses to the far edge),
+  ;; with room for the round cap.  Then take the longer of that and a base length.
+  (define reach (+ (max (/ body-h 2) (+ (/ body-w 2) sdx)) arm-w 3))
+  (define arm-len (max (* bw 0.6) reach))
+  (values cx body-cy sdx arm-len arm-w body-w body-h body-cy))
 
 ;; shoulder x of each arm given the facing: (values left-arm-x right-arm-x).
 ;; Front views put the dancer's left arm (green) on the viewer's right and the
