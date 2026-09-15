@@ -62,11 +62,11 @@
       (when (send evt button-down? 'left)
         (define ex (- (send evt get-x) x))
         (define ey (- (send evt get-y) y))
-        (define-values (lx ly rx ry) (dancer-shoulders BX BY BW BH))
         (cond
           [(>= ey STRIP-Y) (set! facing (index->facing (add1 (facing->index facing))))]
-          [(< ex CX)       (set! l (vec->clock (- ex lx) (- ey ly)))]
-          [else            (set! r (vec->clock (- ex rx) (- ey ry)))])
+          [else
+           (define-values (which hour) (dancer-arm-target BX BY BW BH facing ex ey))
+           (if (eq? which 'l) (set! l hour) (set! r hour))])
         (define a (get-admin))
         (when a (send a needs-update this 0 0 W H))))
 

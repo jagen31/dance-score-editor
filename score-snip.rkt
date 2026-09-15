@@ -130,14 +130,13 @@
         (define d (abs (- ex (col-center col))))
         (if (and (<= d (/ DANCER-W 2)) (< d bd)) (values col d) (values best bd))))
 
-    ;; set the arm of the dancer at `col` from a click, by direction from its shoulder
+    ;; set an arm of the dancer at `col` from a click (which arm + hour is decided
+    ;; by the shared figure geometry, so it tracks the facing-aware sides)
     (define (edit-arm! col ex ey)
-      (define-values (lx ly rx ry)
-        (dancer-shoulders (dbox-x col) MARGIN DANCER-W DANCER-BH))
       (define v (hash-ref dancers col))
-      (if (< ex (col-center col))
-          (vector-set! v 0 (vec->clock (- ex lx) (- ey ly)))
-          (vector-set! v 1 (vec->clock (- ex rx) (- ey ry)))))
+      (define-values (which hour)
+        (dancer-arm-target (dbox-x col) MARGIN DANCER-W DANCER-BH (vector-ref v 2) ex ey))
+      (if (eq? which 'l) (vector-set! v 0 hour) (vector-set! v 1 hour)))
 
     (define/override (on-event dc x y editorx editory evt)
       (define ex (- (send evt get-x) x))

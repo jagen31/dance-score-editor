@@ -1,15 +1,21 @@
 #lang racket/base
 
 ;; Shared dancer figure: danceart's look (yellow/purple body, thick round green
-;; left / blue right arms) drawn to fill an arbitrary box, plus the clock-position
+;; LEFT / blue RIGHT arms) drawn to fill an arbitrary box, plus the clock-position
 ;; math and facing helpers.  Used by both the standalone dance snip and the dance
 ;; lane in the score snip.
+;;
+;; Sides follow the dancer's anatomy, matching danceart's make-dancer:
+;;  - facing towards: the dancer's LEFT arm (green) is on the viewer's RIGHT
+;;  - facing away:    mirrored -- green on the left, blue on the right
+;;  - profile (left/right): both arms come from the centre, one drawn BEHIND the
+;;    body and one IN FRONT, as reads spatially for a side view.
 
 (require racket/class racket/draw racket/math)
 
 (provide clock->vec vec->clock
          FACINGS facing->index index->facing
-         dancer-geom dancer-shoulders draw-dancer)
+         draw-dancer dancer-arm-target)
 
 ;; --- palette -------------------------------------------------------------
 (define YELLOW (make-object color% 250 224 0))
@@ -34,7 +40,7 @@
   (define p (modulo (inexact->exact (round (/ th 30))) 12))
   (if (= p 0) 12 p))
 
-;; --- geometry of a dancer filling box (bx by bw bh) ----------------------
+;; --- geometry ------------------------------------------------------------
 ;; returns (values cx shoulder-y shoulder-dx arm-len arm-w body-w body-h body-cy)
 (define (dancer-geom bx by bw bh)
   (define cx (+ bx (/ bw 2)))
@@ -44,32 +50,67 @@
   (values cx body-cy (* bw 0.22) (* bw 0.38) (max 3 (round (* bh 0.07)))
           body-w body-h body-cy))
 
-;; the left/right shoulder points, for mapping a click to an arm: (values lx ly rx ry)
-(define (dancer-shoulders bx by bw bh)
-  (define-values (cx sy sdx al aw bw2 bh2 bcy) (dancer-geom bx by bw bh))
-  (values (- cx sdx) sy (+ cx sdx) sy))
+;; shoulder x of each arm given the facing: (values left-arm-x right-arm-x).
+;; Front views put the dancer's left arm (green) on the viewer's right and the
+;; right arm (blue) on the left (matching danceart, for both towards and away --
+;; away differs only by colour and the arms hanging BEHIND the body).  A profile
+;; centres both arms.
+(define (arm-shoulder-xs facing cx sdx)
+  (case facing
+    [(towards away) (values (+ cx sdx) (- cx sdx))]   ; green(l) right, blue(r) left
+    [else           (values cx cx)]))                 ; profile: centred
 
-;; draw a dancer (arms at clock hours l/r, facing symbol) filling the box
+;; --- drawing -------------------------------------------------------------
 (define (draw-dancer dc bx by bw bh l r facing)
   (define-values (cx sy sdx arm-len arm-w body-w body-h body-cy)
     (dancer-geom bx by bw bh))
-  (send dc set-pen (make-pen #:style 'transparent))
-  (define bxx (- cx (/ body-w 2)))
-  (define byy (- body-cy (/ body-h 2)))
-  (case facing
-    [(towards) (send dc set-brush YELLOW 'solid) (send dc draw-ellipse bxx byy body-w body-h)]
-    [(away)    (send dc set-brush PURPLE 'solid) (send dc draw-ellipse bxx byy body-w body-h)]
-    [else
-     ;; profile: yellow front column + purple back column (mirror for `right`)
-     (define cw (/ body-w 2))
-     (define front-left? (eq? facing 'left))
-     (send dc set-brush YELLOW 'solid)
-     (send dc draw-rectangle (if front-left? bxx (+ bxx cw)) byy cw body-h)
-     (send dc set-brush PURPLE 'solid)
-     (send dc draw-rectangle (if front-left? (+ bxx cw) bxx) byy cw body-h)])
+  (define-values (lsx rsx) (arm-shoulder-xs facing cx sdx))
+  (define (body!)
+    (send dc set-pen (make-pen #:style 'transparent))
+    (define bxx (- cx (/ body-w 2)))
+    (define byy (- body-cy (/ body-h 2)))
+    (case facing
+      [(towards) (send dc set-brush YELLOW 'solid) (send dc draw-ellipse bxx byy body-w body-h)]
+      [(away)    (send dc set-brush PURPLE 'solid) (send dc draw-ellipse bxx byy body-w body-h)]
+      [else
+       ;; profile: yellow front column + purple back column (mirror for `right`)
+       (define cw (/ body-w 2))
+       (define front-left? (eq? facing 'left))
+       (send dc set-brush YELLOW 'solid)
+       (send dc draw-rectangle (if front-left? bxx (+ bxx cw)) byy cw body-h)
+       (send dc set-brush PURPLE 'solid)
+       (send dc draw-rectangle (if front-left? (+ bxx cw) bxx) byy cw body-h)]))
   (define (arm sx p color)
     (define v (clock->vec p))
     (send dc set-pen (make-pen #:color color #:width arm-w #:cap 'round #:join 'round))
     (send dc draw-line sx sy (+ sx (* arm-len (car v))) (+ sy (* arm-len (cdr v)))))
-  (arm (- cx sdx) l GREEN)     ; left arm, green
-  (arm (+ cx sdx) r BLUE))     ; right arm, blue
+  (case facing
+    [(towards)              ; facing us: arms in FRONT of the body
+     (body!)
+     (arm lsx l GREEN)      ; left arm, green (on the right)
+     (arm rsx r BLUE)]      ; right arm, blue (on the left)
+    [(away)                 ; facing away: same sides, arms BEHIND the body
+     (arm lsx l GREEN)
+     (arm rsx r BLUE)
+     (body!)]
+    [(left)                 ; profile: near arm in front, far arm behind
+     (arm cx r BLUE)        ; right arm is the far side -> behind
+     (body!)
+     (arm cx l GREEN)]      ; left arm near -> in front
+    [(right)
+     (arm cx l GREEN)       ; left arm far -> behind
+     (body!)
+     (arm cx r BLUE)]))     ; right arm near -> in front
+
+;; which arm a click targets and its new clock hour: (values 'l-or-'r hour).
+;; Front-facing: the arm on the clicked side; profile: left half = l, right = r.
+(define (dancer-arm-target bx by bw bh facing ex ey)
+  (define-values (cx sy sdx arm-len arm-w body-w body-h body-cy)
+    (dancer-geom bx by bw bh))
+  (define-values (lsx rsx) (arm-shoulder-xs facing cx sdx))
+  (define-values (which sx)
+    (cond
+      [(= lsx rsx) (if (< ex cx) (values 'l cx) (values 'r cx))]
+      [(<= (abs (- ex lsx)) (abs (- ex rsx))) (values 'l lsx)]
+      [else (values 'r rsx)]))
+  (values which (vec->clock (- ex sx) (- ey sy))))
