@@ -17,8 +17,10 @@
 ;; strip under it to cycle facing, right-click to remove.
 ;;
 ;; Columns are 16th notes; the five staff lines are the treble staff.  Emits
-;; tonart art via `->art-string`: `note`/`music_rest` come from
-;; `lib("tonart4/main.rhm")`; dancers need `lib("programmart/dance.rhm")`.
+;; tonart art via `->art-string`: `note`/`music_rest`/`arm_diagram` come from
+;; `lib("tonart4/main.rhm")` + danceart.  Poses are emitted RAW; to hang them
+;; over an engraved score add `arm_diagram_to_image` (lib("programmart/dance.rhm"))
+;; in your program -- the strudel realizer reads the raw poses directly.
 
 (require racket/class
          racket/gui/base
@@ -323,8 +325,12 @@
                  (format "at [facing ~a]: at [interval ~a ~a]: arm_diagram ~a ~a\n"
                          (vector-ref v 2) (q-str col) (q-str (add1 col))
                          (vector-ref v 0) (vector-ref v 1)))))
-      (string-append note-str rest-str dance-str
-                     (if (zero? (hash-count dancers)) "" "arm_diagram_to_image\n")))
+      ;; NB: emit RAW `arm_diagram` poses -- do NOT auto-convert to images here.
+      ;; Different realizers want different things: the strudel realizer reads the
+      ;; raw poses, while program_png_pict wants images.  So the conversion is the
+      ;; program's choice: add `arm_diagram_to_image` yourself when realizing to a
+      ;; score (program_png_pict / program_scribbler); omit it for strudel.
+      (string-append note-str rest-str dance-str))
 
     (define/public (read-special src line col pos)
       (datum->syntax
