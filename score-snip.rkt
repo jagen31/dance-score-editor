@@ -1,9 +1,11 @@
 #lang racket/base
 
-;; An embedded DrRacket editor for a short score with dances.  Click cells on the
+;; An embedded DrRacket editor for a score with dances.  Click cells on the
 ;; staff to toggle notes; click the lane ABOVE the staff to place dancers, which
-;; snap to the 16th-note columns and hang over the score.  The snip persists in
-;; the .rkt file and emits the equivalent tonart art forms (`->art-string`).
+;; snap to the 16th-note columns and hang over the score.  The grid extends
+;; rightward without limit: click the `+` strip at the right edge to add more
+;; columns (right-click it to trim empty ones).  The snip persists in the .rkt
+;; file and emits the equivalent tonart art forms (`->art-string`).
 ;;
 ;; Notes: rows run top (high) to bottom (low), one diatonic step each; the five
 ;; staff lines are the treble staff (E4 G4 B4 D5 F5).  Columns are 16th notes.
@@ -26,16 +28,17 @@
 (provide score-snip% score-snip-class snip-class)
 
 ;; --- geometry ------------------------------------------------------------
-(define COLS 16)
+(define DEFAULT-COLS 16)
+(define GROW 8)                       ; columns added/removed per `+`/`-` click
 (define ROWS 17)                      ; rows 0..16, top..bottom
 (define CELL-W 22)
 (define CELL-H 9)
 (define MARGIN 12)
+(define ADD-W 30)                     ; the `+`/`-` strip at the right edge
 (define DANCE-LANE-H 108)             ; room above the staff for dancers
 (define DANCER-W 44)                  ; a dancer's drawn width (spans ~2 columns)
 (define DANCER-BH 90)                 ; a dancer's figure height (strip below it)
 (define GRID-TOP (+ MARGIN DANCE-LANE-H))    ; y where the note grid starts
-(define W (+ (* 2 MARGIN) (* COLS CELL-W)))
 (define H (+ GRID-TOP (* (sub1 ROWS) CELL-H) MARGIN))
 (define STAFF-ROWS '(4 6 8 10 12))    ; rows drawn as staff lines
 
@@ -56,24 +59,36 @@
 (define (dbox-x c) (- (col-center c) (/ DANCER-W 2)))
 
 (define LABEL-FONT (make-object font% 9 'default 'normal 'normal))
+(define PLUS-FONT (make-object font% 18 'default 'normal 'bold))
 
 ;; --- the snip ------------------------------------------------------------
 (define score-snip%
   (class* snip% (readable-snip<%>)
     (init-field [notes (make-hash)]       ; (cons col row) -> #t
-                [dancers (make-hash)])    ; col -> (vector l r facing-symbol)
+                [dancers (make-hash)]     ; col -> (vector l r facing-symbol)
+                [cols DEFAULT-COLS])      ; how many 16th-note columns are shown
     (super-new)
     (inherit get-admin set-snipclass set-flags get-flags)
     (set-snipclass score-snip-class)
     (set-flags (cons 'handles-events (get-flags)))
 
+    (define (grid-right) (+ MARGIN (* cols CELL-W)))    ; x past the last column
+    (define (width) (+ (grid-right) ADD-W))
+    ;; the highest column any note/dancer uses (or -1 if empty)
+    (define (max-used-col)
+      (apply max -1 (append (map car (hash-keys notes)) (hash-keys dancers))))
+    (define (min-cols) (max GROW (add1 (max-used-col))))
+
     (define (refresh)
       (define a (get-admin))
-      (when a (send a needs-update this 0 0 W H)))
+      (when a (send a needs-update this 0 0 (width) H)))
+    (define (resized!)
+      (define a (get-admin))
+      (when a (send a resized this #t) (send a needs-update this 0 0 (width) H)))
 
     (define/override (get-extent dc x y [w #f] [h #f] [descent #f]
                                  [space #f] [lspace #f] [rspace #f])
-      (when w (set-box! w (exact->inexact W)))
+      (when w (set-box! w (exact->inexact (width))))
       (when h (set-box! h (exact->inexact H)))
       (when descent (set-box! descent 0.0))
       (when space (set-box! space 0.0))
@@ -83,15 +98,15 @@
     (define/override (draw dc x y left top right bottom dx dy draw-caret)
       (send dc set-brush "white" 'solid)
       (send dc set-pen "black" 1 'solid)
-      (send dc draw-rectangle x y W H)
+      (send dc draw-rectangle x y (width) H)
       ;; faint column gridlines, full height, so dancers visibly snap to 16ths
       (send dc set-pen (make-object color% 225 225 225) 1 'solid)
-      (for ([c (in-range (add1 COLS))])
+      (for ([c (in-range (add1 cols))])
         (define cx (+ x MARGIN (* c CELL-W)))
         (send dc draw-line cx (+ y MARGIN) cx (+ y (- H MARGIN))))
       ;; separator between the dance lane and the staff
       (send dc set-pen (make-object color% 200 200 200) 1 'solid)
-      (send dc draw-line (+ x MARGIN) (+ y GRID-TOP -4) (+ x (- W MARGIN)) (+ y GRID-TOP -4))
+      (send dc draw-line (+ x MARGIN) (+ y GRID-TOP -4) (+ x (grid-right)) (+ y GRID-TOP -4))
       ;; dancers in the lane
       (send dc set-font LABEL-FONT)
       (send dc set-text-foreground (make-object color% 120 120 120))
@@ -105,24 +120,33 @@
       (send dc set-pen "black" 1 'solid)
       (for ([r (in-list STAFF-ROWS)])
         (define ry (+ y GRID-TOP (* r CELL-H)))
-        (send dc draw-line (+ x MARGIN) ry (+ x (- W MARGIN)) ry))
+        (send dc draw-line (+ x MARGIN) ry (+ x (grid-right)) ry))
       ;; note heads
       (send dc set-brush "black" 'solid)
       (for ([k (in-list (sorted-keys notes))])
         (define nx (+ x MARGIN (* (car k) CELL-W) 2))
         (define ny (+ y GRID-TOP (* (cdr k) CELL-H) (- (quotient CELL-H 2))))
-        (send dc draw-ellipse nx ny (- CELL-W 4) CELL-H)))
+        (send dc draw-ellipse nx ny (- CELL-W 4) CELL-H))
+      ;; the `+` strip at the right edge (right-click trims): a light button
+      (define ax (+ x (grid-right)))
+      (send dc set-brush (make-object color% 240 240 240) 'solid)
+      (send dc set-pen (make-object color% 200 200 200) 1 'solid)
+      (send dc draw-rectangle (+ ax 3) (+ y GRID-TOP) (- ADD-W 6) (- H GRID-TOP MARGIN))
+      (send dc set-font PLUS-FONT)
+      (send dc set-text-foreground (make-object color% 120 120 120))
+      (send dc draw-text "+" (+ ax 8) (+ y GRID-TOP 6)))
 
     ;; --- hit testing -------------------------------------------------------
+    (define (in-add-zone? ex) (>= ex (grid-right)))
     ;; nearest (col . row) note cell for a snip-local point, or #f
     (define (cell-at ex ey)
       (define c (inexact->exact (floor (/ (- ex MARGIN) CELL-W))))
       (define r (inexact->exact (round (/ (- ey GRID-TOP) CELL-H))))
-      (and (>= c 0) (< c COLS) (>= r 0) (< r ROWS) (cons c r)))
+      (and (>= c 0) (< c cols) (>= r 0) (< r ROWS) (cons c r)))
     ;; the column for a lane click (for placing a new dancer), or #f
     (define (col-at ex)
       (define c (inexact->exact (floor (/ (- ex MARGIN) CELL-W))))
-      (and (>= c 0) (< c COLS) c))
+      (and (>= c 0) (< c cols) c))
     ;; the placed dancer nearest ex (within half a dancer width), or #f
     (define (dancer-hit ex)
       (for/fold ([best #f] [bd +inf.0] #:result best)
@@ -142,12 +166,18 @@
       (define ex (- (send evt get-x) x))
       (define ey (- (send evt get-y) y))
       (cond
-        ;; right-click removes a dancer
         [(send evt button-down? 'right)
-         (define hit (and (< ey GRID-TOP) (dancer-hit ex)))
-         (when hit (hash-remove! dancers hit) (refresh))]
+         (cond
+           ;; right-click the `+` strip: trim empty columns from the right
+           [(in-add-zone? ex) (set! cols (max (min-cols) (- cols GROW))) (resized!)]
+           ;; right-click a dancer: remove it
+           [(< ey GRID-TOP)
+            (define hit (dancer-hit ex))
+            (when hit (hash-remove! dancers hit) (refresh))])]
         [(send evt button-down? 'left)
          (cond
+           ;; the `+` strip: extend the grid rightward
+           [(in-add-zone? ex) (set! cols (+ cols GROW)) (resized!)]
            ;; --- the dance lane ---
            [(< ey GRID-TOP)
             (define hit (dancer-hit ex))
@@ -172,7 +202,7 @@
               (refresh))])]))
 
     (define/override (copy)
-      (new score-snip% [notes (hash-copy notes)] [dancers (copy-dancers dancers)]))
+      (new score-snip% [notes (hash-copy notes)] [dancers (copy-dancers dancers)] [cols cols]))
 
     (define/override (write f)
       (define ks (sorted-keys notes))
@@ -183,7 +213,8 @@
       (for ([col (in-list ds)])
         (define v (hash-ref dancers col))
         (send f put col) (send f put (vector-ref v 0)) (send f put (vector-ref v 1))
-        (send f put (facing->index (vector-ref v 2)))))
+        (send f put (facing->index (vector-ref v 2))))
+      (send f put cols))
 
     ;; the score as tonart art forms: a note per toggled cell, a dancer per pose
     ;; (each under a `facing` and placed at its column's 16th-note interval)
@@ -232,7 +263,8 @@
         (define r (send f get-exact))
         (hash-set! notes (cons c r) #t))
       (define dancers (make-hash))
-      ;; dancers were added in version 2; older files simply have none
+      (define cols DEFAULT-COLS)
+      ;; dancers (v2) and cols (v3) were added later; older files just lack them
       (with-handlers ([exn:fail? void])
         (define d (send f get-exact))
         (for ([_ (in-range d)])
@@ -240,12 +272,13 @@
           (define l (send f get-exact))
           (define r (send f get-exact))
           (define fi (send f get-exact))
-          (hash-set! dancers col (vector l r (index->facing fi)))))
-      (new score-snip% [notes notes] [dancers dancers]))))
+          (hash-set! dancers col (vector l r (index->facing fi))))
+        (set! cols (send f get-exact)))
+      (new score-snip% [notes notes] [dancers dancers] [cols (max DEFAULT-COLS cols)]))))
 
 (define score-snip-class (new score-snip-class%))
 (send score-snip-class set-classname "score-dance-editor:score")
-(send score-snip-class set-version 2)
+(send score-snip-class set-version 3)
 (send (get-the-snip-class-list) add score-snip-class)
 
 ;; the name DrRacket looks up to auto-load this class when reading a file
