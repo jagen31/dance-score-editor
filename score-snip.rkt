@@ -8,8 +8,8 @@
 ;;
 ;; Columns are 16th notes (a note spanning N columns is an N/16 note); the five
 ;; staff lines are the treble staff (E4 G4 B4 D5 F5).  Emits tonart art forms
-;; via `->art-string` (needs `lib("tonart4/musicxml.rhm")` imported for the
-;; `music_rest`s, and `lib("programmart/dance.rhm")` for the dancers).
+;; via `->art-string`: `note` / `music_rest` come from `lib("tonart4/main.rhm")`,
+;; the dancers need `lib("programmart/dance.rhm")` imported.
 ;;
 ;; Dancers: one per column in the lane; left-click a column to add one, click
 ;; near a placed dancer to aim an arm (left half = green/left, right half =
