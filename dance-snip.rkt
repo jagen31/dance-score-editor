@@ -20,8 +20,8 @@
 (define W 200)
 (define H 230)
 (define CX (quotient W 2))
-(define SHOULDER-Y 66)
-(define SHOULDER-DX 16)
+(define SHOULDER-Y 88)               ; mid-body, so arms sit at the sides
+(define SHOULDER-DX 33)              ; out near the body's edges
 (define ARM-LEN 56)
 (define ARM-W 8)                     ; thick, round-capped arms like the figures
 (define BODY-W 78)
