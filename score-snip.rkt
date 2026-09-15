@@ -200,7 +200,11 @@
                 (define v (hash-ref dancers col))
                 (format "at [facing ~a]: at [interval ~a ~a]: arm_diagram ~a ~a\n"
                         (vector-ref v 2) col (add1 col)
-                        (vector-ref v 0) (vector-ref v 1))))))
+                        (vector-ref v 0) (vector-ref v 1))))
+       ;; the score renderer draws `image`s, never `arm_diagram` -- so convert the
+       ;; poses here, and dances "just work" over the staff like the notes do.
+       ;; (Needs `lib("programmart/dance.rhm")` imported for arm_diagram_to_image.)
+       (if (zero? (hash-count dancers)) "" "arm_diagram_to_image\n")))
 
     ;; read AS code when the file is run: the forms wrapped in one `at []:` block
     ;; (a read-special result is a single term).  No lexical context
