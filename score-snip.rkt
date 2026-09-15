@@ -213,8 +213,10 @@
       (for ([col (in-list ds)])
         (define v (hash-ref dancers col))
         (send f put col) (send f put (vector-ref v 0)) (send f put (vector-ref v 1))
-        (send f put (facing->index (vector-ref v 2))))
-      (send f put cols))
+        (send f put (facing->index (vector-ref v 2)))))
+    ;; NB: `cols` is intentionally NOT persisted -- adding a trailing field breaks
+    ;; older saved snips (the reader overreads).  On load the grid is sized to fit
+    ;; its content instead (see the class `read`), and the `+` extends it per session.
 
     ;; the score as tonart art forms: a note per toggled cell, a dancer per pose
     ;; (each under a `facing` and placed at its column's 16th-note interval)
@@ -263,8 +265,7 @@
         (define r (send f get-exact))
         (hash-set! notes (cons c r) #t))
       (define dancers (make-hash))
-      (define cols DEFAULT-COLS)
-      ;; dancers (v2) and cols (v3) were added later; older files just lack them
+      ;; dancers were added in version 2; older files simply have none
       (with-handlers ([exn:fail? void])
         (define d (send f get-exact))
         (for ([_ (in-range d)])
@@ -272,13 +273,15 @@
           (define l (send f get-exact))
           (define r (send f get-exact))
           (define fi (send f get-exact))
-          (hash-set! dancers col (vector l r (index->facing fi))))
-        (set! cols (send f get-exact)))
-      (new score-snip% [notes notes] [dancers dancers] [cols (max DEFAULT-COLS cols)]))))
+          (hash-set! dancers col (vector l r (index->facing fi)))))
+      ;; size the grid to fit its content (cols is not stored -- see write)
+      (define used (apply max -1 (append (map car (hash-keys notes)) (hash-keys dancers))))
+      (new score-snip% [notes notes] [dancers dancers]
+           [cols (max DEFAULT-COLS (+ used 4))]))))
 
 (define score-snip-class (new score-snip-class%))
 (send score-snip-class set-classname "score-dance-editor:score")
-(send score-snip-class set-version 3)
+(send score-snip-class set-version 2)
 (send (get-the-snip-class-list) add score-snip-class)
 
 ;; the name DrRacket looks up to auto-load this class when reading a file
