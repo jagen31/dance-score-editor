@@ -4,50 +4,28 @@
 ;; Click the left/right half of the figure to point that arm at the clock
 ;; position of your click (12 = up, 3 = right, 6 = down, 9 = left); click the
 ;; label strip at the bottom to cycle which way the dancer faces.  The snip
-;; persists in the .rkt file and emits `arm-diagram L R` + `facing DIR`.
+;; persists in the .rkt file and emits `arm_diagram L R` under a `facing`.
+;;
+;; (The score snip embeds the same figure in a lane above the staff; the shape
+;; and clock/facing math live in dancer-draw.rkt so both stay identical.)
 
 (require racket/class
          racket/gui/base
          racket/snip
-         racket/math
          racket/port
          shrubbery/parse    ; parse the emitted art code into a Rhombus term
-         "art-common.rkt")  ; art->block: wrap the forms for read-special
+         "art-common.rkt"   ; art->block: wrap the forms for read-special
+         "dancer-draw.rkt") ; the shared dancer figure + clock/facing helpers
 
 (provide dance-snip% dance-snip-class snip-class)
 
 ;; --- geometry ------------------------------------------------------------
 (define W 200)
 (define H 230)
-(define CX (quotient W 2))
-(define SHOULDER-Y 88)               ; mid-body, so arms sit at the sides
-(define SHOULDER-DX 33)              ; out near the body's edges
-(define ARM-LEN 56)
-(define ARM-W 8)                     ; thick, round-capped arms like the figures
-(define BODY-W 78)
-(define BODY-H 120)
-(define BODY-CY 92)                  ; body-ellipse centre y
 (define STRIP-Y (- H 26))           ; the facing-label strip
-
-;; the dancer's palette (danceart: yellow body, purple back, green/blue arms)
-(define YELLOW (make-object color% 250 224 0))
-(define PURPLE (make-object color% 130 0 200))
-(define GREEN  (make-object color% 0 170 0))
-(define BLUE   (make-object color% 0 60 220))
-
-(define FACINGS (vector 'towards 'right 'away 'left))
-(define (facing->index f) (or (for/first ([g (in-vector FACINGS)] [i (in-naturals)] #:when (eq? f g)) i) 0))
-
-;; clock position (1..12) -> unit vector (dx . dy), 12 = up
-(define (clock->vec p)
-  (define th (degrees->radians (* p 30)))
-  (cons (sin th) (- (cos th))))
-
-;; a click offset (dx dy) from a shoulder -> nearest clock position 1..12
-(define (vec->clock dx dy)
-  (define th (radians->degrees (atan dx (- dy))))   ; 0 = up, 90 = right
-  (define p (modulo (inexact->exact (round (/ th 30))) 12))
-  (if (= p 0) 12 p))
+(define BX 8) (define BY 6)         ; the figure box within the snip
+(define BW (- W 16)) (define BH (- STRIP-Y 12))
+(define CX (+ BX (/ BW 2)))
 
 ;; --- the snip ------------------------------------------------------------
 (define dance-snip%
@@ -67,43 +45,12 @@
       (when lspace (set-box! lspace 0.0))
       (when rspace (set-box! rspace 0.0)))
 
-    ;; one thick, round-capped arm from a shoulder toward clock position `p`
-    (define (arm dc x y sx sy p color)
-      (define v (clock->vec p))
-      (send dc set-pen (make-pen #:color color #:width ARM-W #:cap 'round #:join 'round))
-      (send dc draw-line (+ x sx) (+ y sy)
-            (+ x sx (* ARM-LEN (car v))) (+ y sy (* ARM-LEN (cdr v)))))
-
-    ;; the body -- a coloured shape whose form shows the facing (danceart's
-    ;; make-body): a yellow blob facing out, purple facing away, a yellow/purple
-    ;; profile for left/right.
-    (define (draw-body dc x y)
-      (send dc set-pen (make-pen #:style 'transparent))
-      (define bx (+ x (- CX (quotient BODY-W 2))))
-      (define by (+ y (- BODY-CY (quotient BODY-H 2))))
-      (define (fill c) (send dc set-brush c 'solid))
-      (case facing
-        [(towards) (fill YELLOW) (send dc draw-ellipse bx by BODY-W BODY-H)]
-        [(away)    (fill PURPLE) (send dc draw-ellipse bx by BODY-W BODY-H)]
-        [else
-         ;; profile: two side-by-side columns, yellow (front) + purple (back);
-         ;; mirror for `right`
-         (define cw (quotient BODY-W 2))
-         (define front-left? (eq? facing 'left))
-         (fill YELLOW)
-         (send dc draw-rectangle (if front-left? bx (+ bx cw)) by cw BODY-H)
-         (fill PURPLE)
-         (send dc draw-rectangle (if front-left? (+ bx cw) bx) by cw BODY-H)]))
-
     (define/override (draw dc x y left top right bottom dx dy draw-caret)
       (send dc set-smoothing 'aligned)
       (send dc set-brush "white" 'solid)
       (send dc set-pen "black" 1 'solid)
       (send dc draw-rectangle x y W H)
-      ;; body first, then the arms over it
-      (draw-body dc x y)
-      (arm dc x y (- CX SHOULDER-DX) SHOULDER-Y l GREEN)   ; left arm, green
-      (arm dc x y (+ CX SHOULDER-DX) SHOULDER-Y r BLUE)    ; right arm, blue
+      (draw-dancer dc (+ x BX) (+ y BY) BW BH l r facing)
       ;; facing strip
       (send dc set-pen "black" 1 'solid)
       (send dc draw-line (+ x 0) (+ y STRIP-Y) (+ x W) (+ y STRIP-Y))
@@ -115,14 +62,11 @@
       (when (send evt button-down? 'left)
         (define ex (- (send evt get-x) x))
         (define ey (- (send evt get-y) y))
+        (define-values (lx ly rx ry) (dancer-shoulders BX BY BW BH))
         (cond
-          [(>= ey STRIP-Y)
-           ;; cycle facing
-           (set! facing (vector-ref FACINGS (modulo (add1 (facing->index facing)) 4)))]
-          [(< ex CX)
-           (set! l (vec->clock (- ex (- CX SHOULDER-DX)) (- ey SHOULDER-Y)))]
-          [else
-           (set! r (vec->clock (- ex (+ CX SHOULDER-DX)) (- ey SHOULDER-Y)))])
+          [(>= ey STRIP-Y) (set! facing (index->facing (add1 (facing->index facing))))]
+          [(< ex CX)       (set! l (vec->clock (- ex lx) (- ey ly)))]
+          [else            (set! r (vec->clock (- ex rx) (- ey ry)))])
         (define a (get-admin))
         (when a (send a needs-update this 0 0 W H))))
 
@@ -158,7 +102,7 @@
       (define l (send f get-exact))
       (define r (send f get-exact))
       (define fi (send f get-exact))
-      (new dance-snip% [l l] [r r] [facing (vector-ref FACINGS (modulo fi 4))]))))
+      (new dance-snip% [l l] [r r] [facing (index->facing fi)]))))
 
 (define dance-snip-class (new dance-snip-class%))
 (send dance-snip-class set-classname "score-dance-editor:dance")

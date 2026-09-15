@@ -31,10 +31,10 @@
     (super-new)
     (inherit get-menu-bar get-definitions-text)
     (define menu (new menu% [label "Insert Art"] [parent (get-menu-bar)]))
-    (new menu-item% [label "Score editor"] [parent menu]
+    (new menu-item% [label "Score + dance editor"] [parent menu]
          [callback (lambda (i e)
                      (send (get-definitions-text) insert (new score-snip%)))])
-    (new menu-item% [label "Dance pose"] [parent menu]
+    (new menu-item% [label "Dance pose (standalone)"] [parent menu]
          [callback (lambda (i e)
                      (send (get-definitions-text) insert (new dance-snip%)))])
     (new separator-menu-item% [parent menu])
